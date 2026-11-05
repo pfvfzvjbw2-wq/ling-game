@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>修仙摸鱼 · 水墨幻境</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overflow: hidden; font-family: "Songti SC", "Noto Serif SC", serif; }
+  
+  /* 动态水墨背景 */
+  #bg-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; background: #0a0908; }
+  .vignette { position: fixed; inset: 0; background: radial-gradient(circle, transparent 40%, rgba(0,0,0,0.9) 100%); z-index: -1; pointer-events: none; }
+
+  body { color: #e8dcc8; display: flex; flex-direction: column; max-width: 520px; margin: 0 auto; perspective: 1000px; }
+
+  /* 顶部状态栏 */
+  .top {
+    padding: 14px 18px 10px; background: linear-gradient(180deg, rgba(30,24,18,0.95), rgba(24,19,14,0.6));
+    border-bottom: 1px solid rgba(232,200,122,0.2); flex-shrink: 0; position: relative; backdrop-filter: blur(5px);
+  }
+  .top::after { content: ''; position: absolute; bottom: -1px; left: 0; width: 100%; height: 1px; background: linear-gradient(90deg, transparent, #e8c87a, transparent); }
+  .row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: #b8a888; text-shadow: 0 2px 4px #000; }
+  .realm { font-size: 20px; color: #e8c87a; letter-spacing: 2px; font-weight: bold; text-shadow: 0 0 10px rgba(232,200,122,0.5); }
+  .bar { height: 4px; background: #2a221a; border-radius: 2px; margin: 10px 0 6px; overflow: hidden; box-shadow: inset 0 1px 3px #000; }
+  .bar > i { display: block; height: 100%; background: linear-gradient(90deg, #8a6a2a, #f5d78e, #8a6a2a); width: 0%; transition: width 0.3s ease; box-shadow: 0 0 8px #e8c87a; }
+  .weather { font-size: 12px; color: #9a8a6a; margin-top: 6px; display: flex; justify-content: space-between; }
+  .weather b { color: #d8b86a; }
+
+  /* 中间事件卡（3D 悬浮玉简） */
+  .main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 20px; overflow: hidden; }
+  .card {
+    width: 100%; background: linear-gradient(135deg, rgba(30,24,18,0.9), rgba(20,16,12,0.95));
+    border: 1px solid rgba(232,200,122,0.3); border-radius: 12px; padding: 24px 20px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.8), 0 0 20px rgba(232,200,122,0.1) inset;
+    transform-style: preserve-3d; transition: transform 0.1s ease-out;
+    position: relative; backdrop-filter: blur(10px);
+  }
+  .card::before { content: ''; position: absolute; inset: 4px; border: 1px solid rgba(232,200,122,0.1); border-radius: 8px; pointer-events: none; }
+  .card .title { font-size: 18px; color: #e8c87a; margin-bottom: 12px; letter-spacing: 2px; text-align: center; text-shadow: 0 0 8px rgba(232,200,122,0.4); }
+  .card .desc { font-size: 14px; color: #b8a888; line-height: 1.8; margin-bottom: 20px; text-align: center; }
+
+  /* 选项按钮 */
+  .opt {
+    display: block; width: 100%; text-align: center; background: rgba(42,32,24,0.8);
+    border: 1px solid rgba(74,58,40,0.8); color: #e8dcc8; padding: 14px 12px; border-radius: 8px;
+    font-size: 14px; font-family: inherit; margin-bottom: 12px; cursor: pointer;
+    transition: all 0.2s ease; transform: translateZ(20px); position: relative; overflow: hidden;
+  }
+  .opt:hover { background: rgba(60,46,34,0.9); border-color: #e8c87a; box-shadow: 0 0 15px rgba(232,200,122,0.2); }
+  .opt:active { transform: translateZ(10px) scale(0.98); }
+  .opt .risk { display: block; font-size: 11px; color: #a08a6a; margin-top: 6px; }
+
+  /* 底部菜单 */
+  .bottom {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
+    background: rgba(58,46,34,0.5); border-top: 1px solid rgba(232,200,122,0.2); flex-shrink: 0; backdrop-filter: blur(10px);
+  }
+  .bottom button {
+    background: rgba(20,16,12,0.8); border: none; color: #c8b898; padding: 16px 4px;
+    font-size: 14px; font-family: inherit; cursor: pointer; letter-spacing: 2px; transition: all 0.2s;
+  }
+  .bottom button:active { background: rgba(42,32,24,1); }
+  .bottom button.hot { color: #e85a4a; text-shadow: 0 0 10px rgba(232,90,74,0.6); animation: pulse 1.5s infinite; }
+
+  @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
+
+  /* 弹窗和特效 */
+  .mask { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: none; align-items: flex-end; justify-content: center; z-index: 10; backdrop-filter: blur(5px); }
+  .mask.show { display: flex; }
+  .sheet { width: 100%; max-width: 520px; background: #1c1610; border-top: 1px solid #e8c87a; border-radius: 16px 16px 0 0; padding: 24px 20px 30px; max-height: 80dvh; overflow: auto; box-shadow: 0 -10px 30px rgba(0,0,0,0.8); animation: slideUp 0.3s ease; }
+  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  .sheet h3 { font-size: 18px; color: #e8c87a; margin-bottom: 16px; text-align: center; letter-spacing: 2px; }
+  .slot { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px dashed rgba(232,200,122,0.2); }
+  .slot .k { font-size: 14px; color: #a89878; }
+  .slot .v { font-size: 14px; color: #e8dcc8; }
+  .slot button { background: #2a2018; border: 1px solid #e8c87a; color: #e8c87a; padding: 6px 16px; border-radius: 20px; font-size: 12px; cursor: pointer; }
+  .close { width: 100%; margin-top: 20px; background: transparent; border: 1px solid #4a3a28; color: #b8a888; padding: 12px; border-radius: 8px; font-size: 14px; }
+  
+  .log { font-size: 11px; color: #7a6a5a; line-height: 1.8; margin-top: 15px; max-height: 80px; overflow: auto; text-align: center; }
+  .dead .title { color: #e85a4a; text-shadow: 0 0 10px rgba(232,90,74,0.5); }
+
+  /* 雷劫特效 */
+  .thunder { position: fixed; inset: 0; background: #fff; z-index: 99; opacity: 0; pointer-events: none; mix-blend-mode: overlay; }
+  .thunder.flash { animation: flash 0.4s ease-out; }
+  @keyframes flash { 0% { opacity: 0; } 20% { opacity: 0.8; } 30% { opacity: 0.1; } 40% { opacity: 0.6; } 100% { opacity: 0; } }
+</style>
+</head>
+<body>
+
+<canvas id="bg-canvas"></canvas>
+<div class="vignette"></div>
+<div class="thunder" id="thunder"></div>
+
+<div class="top">
+  <div class="row">
+    <span class="realm" id="realm">炼气初期</span>
+    <span id="stones">灵石 0</span>
+  </div>
+  <div class="bar"><i id="prog"></i></div>
+  <div class="row" style="font-size:12px">
+    <span id="cult">修为 0 / 100</span>
+  </div>
+  <div class="weather" id="weather">
+    <span>天气：<b>晴天</b>（修为+20%）</span>
+    <span id="wardText"></span>
+  </div>
+</div>
+
+<div class="main" id="main"></div>
+
+<div class="bottom">
+  <button id="btnBreak">突破</button>
+  <button id="btnSend">派遣</button>
+  <button id="btnBuild">构筑</button>
+  <button id="btnGain">收菜</button>
+</div>
+
+<div class="mask" id="mask">
+  <div class="sheet" id="sheet"></div>
+</div>
+
+<script>
+// ================= 3D 粒子背景 (Canvas) =================
+const canvas = document.getElementById('bg-canvas');
+const ctx = canvas.getContext('2d');
+let width, height;
+let particles = [];
+
+function resize() {
+  width = canvas.width = window.innerWidth;
+  height = canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+class Particle {
+  constructor() {
+    this.x = Math.random() * width;
+    this.y = Math.random() * height;
+    this.z = Math.random() * 2 + 0.5; // 景深
+    this.size = Math.random() * 2 + 0.5;
+    this.speedX = (Math.random() - 0.5) * 0.5;
+    this.speedY = (Math.random() - 0.5) * 0.5;
+    this.alpha = Math.random() * 0.5 + 0.1;
+  }
+  update() {
+    this.x += this.speedX * this.z;
+    this.y += this.speedY * this.z;
+    if (this.x < 0) this.x = width; if (this.x > width) this.x = 0;
+    if (this.y < 0) this.y = height; if (this.y > height) this.y = 0;
+  }
+  draw() {
+    ctx.fillStyle = `rgba(232, 200, 122, ${this.alpha})`;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size * this.z, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+for (let i = 0; i < 100; i++) particles.push(new Particle());
+
+function animateBg() {
+  ctx.clearRect(0, 0, width, height);
+  // 绘制淡淡的连线，形成星图感
+  for(let i=0; i<particles.length; i++){
+    particles[i].update(); particles[i].draw();
+  }
+  requestAnimationFrame(animateBg);
+}
+animateBg();
+
+// ================= 3D 卡片跟随鼠标 =================
+const mainArea = document.getElementById('main');
+mainArea.addEventListener('mousemove', (e) => {
+  const card = document.querySelector('.card');
+  if(!card) return;
+  const rect = mainArea.getBoundingClientRect();
+  const x = e.clientX - rect.left - rect.width / 2;
+  const y = e.clientY - rect.top - rect.height / 2;
+  const rotateX = -(y / rect.height) * 20;
+  const rotateY = (x / rect.width) * 20;
+  card.style.transform = `rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
+});
+mainArea.addEventListener('mouseleave', () => {
+  const card = document.querySelector('.card');
+  if(card) card.style.transform = `rotateX(0) rotateY(0)`;
+});
+
+// ================= 核心游戏逻辑 =================
+const REALMS = [
+  {name:'炼气初期',need:100},{name:'炼气中期',need:250},{name:'炼气后期',need:500},
+  {name:'筑基初期',need:1000},{name:'筑基中期',need:2000},{name:'筑基后期',need:4000},
+  {name:'金丹初期',need:8000},{name:'金丹中期',need:15000},{name:'金丹后期',need:30000},
+  {name:'元婴初期',need:60000},{name:'元婴中期',need:120000},{name:'元婴后期',need:240000},
+  {name:'化神初期',need:500000}
+];
+const BIG_BREAK = new Set([3,6,9,12]);
+
+const WEATHERS = [
+  {id:'sunny',name:'晴天',desc:'修为+20%',cult:1.2,risk:1,breakBonus:0},
+  {id:'rain',name:'雷雨天',desc:'突破+15%，死亡风险翻倍',cult:1,risk:2,breakBonus:0.15},
+  {id:'tide',name:'灵气潮汐',desc:'收益+30%，高危事件上升',cult:1.3,risk:1.3,breakBonus:0.05},
+  {id:'blood',name:'血月',desc:'传说机遇翻倍，死亡风险+50%',cult:1.1,risk:1.5,breakBonus:0.1,rare:true},
+  {id:'fog',name:'大雾',desc:'事件触发+50%，派遣收益-30%',cult:0.9,risk:1.1,breakBonus:0}
+];
+
+const EVENTS = [
+  {min:0,max:3,title:'古洞探幽',desc:'山壁裂开一道缝隙，里面隐约有灵光闪动。',opts:[
+    {t:'探入古洞',rate:0.7,ok:{stones:[20,50],cult:30},fail:{cult:-30},risk:'三成受伤扣30%修为'},
+    {t:'绕道离开',rate:1,ok:{cult:10},fail:null,risk:'无事发生，心境+1'}
+  ]},
+  {min:0,max:3,title:'受伤的散修',desc:'一名散修倒在路边，气息微弱，怀中似有玉简。',opts:[
+    {t:'出手相救',rate:0.8,ok:{stones:0,cult:20,rep:1},fail:{cult:-20},risk:'两成被反咬，扣20%修为'},
+    {t:'取走玉简',rate:0.6,ok:{stones:[40,80]},fail:{cult:-40},risk:'四成触发禁制，扣40%修为'}
+  ]},
+  {min:0,max:3,title:'灵草园',desc:'一片野生灵草园，但周围有妖兽气息。',opts:[
+    {t:'小心采集',rate:0.75,ok:{stones:[15,35]},fail:{cult:-25},risk:'两成五被妖兽所伤'},
+    {t:'强行采摘',rate:0.45,ok:{stones:[50,100]},fail:{cult:-50},risk:'五成五重伤扣50%修为'}
+  ]},
+  {min:0,max:4,title:'前辈遗蜕',desc:'一具坐化的修士遗蜕，身边散落着储物袋。',opts:[
+    {t:'探查遗蜕',rate:0.65,ok:{stones:[30,70],cult:40},fail:{cult:-35},risk:'三成五触发残留禁制'},
+    {t:'恭敬行礼离开',rate:1,ok:{cult:5},fail:null,risk:'心境微涨'}
+  ]},
+  {min:2,max:6,title:'魔道修士',desc:'一名魔修拦住去路，索要过路灵石。',opts:[
+    {t:'交出灵石',rate:1,ok:{stones:-30},fail:null,risk:'损失30灵石'},
+    {t:'与之交手',rate:0.5,ok:{stones:[40,80]},fail:{cult:-60},risk:'五成落败扣60%修为'}
+  ]},
+  {min:3,max:9,title:'仇家寻仇',desc:'一名与你结怨的修士找上门来，杀气腾腾。',opts:[
+    {t:'正面迎战',rate:0.55,ok:{stones:[60,120]},fail:{death:0.3,cult:-100},risk:'四成五落败，其中三成致死'},
+    {t:'破财消灾',rate:1,ok:{stones:-80},fail:null,risk:'损失80灵石'}
+  ]},
+  {min:5,max:12,title:'天降异象',desc:'天空裂开一道金光，有宝物坠落。',opts:[
+    {t:'冲过去抢夺',rate:0.4,ok:{cult:[150,300],stones:[100,200]},fail:{death:0.35,cult:-150},risk:'六成失败，其中三成五致死'},
+    {t:'远远观望',rate:1,ok:{cult:20},fail:null,risk:'安全'}
+  ]},
+  {min:6,max:12,title:'护道符',desc:'一位老道拦住你，说与你有缘，赠你一物。',opts:[
+    {t:'收下',rate:1,ok:{ward:1},fail:null,risk:'获得护道符，可免一次死亡'},
+    {t:'婉拒',rate:1,ok:{cult:30},fail:null,risk:'心境提升'}
+  ]}
+];
+
+const SKILLS = {
+  skill:[{name:'无',e:''},{name:'烈火诀',e:'历练收益+15%'},{name:'玄水经',e:'突破成功率+8%'}],
+  pet:[{name:'无',e:''},{name:'火灵狐',e:'火系联动+10%'},{name:'木灵鹿',e:'渡劫失败保留修为+10%'}],
+  pill:[{name:'无',e:''},{name:'回春丹方',e:'重伤时恢复+20%'},{name:'破境丹方',e:'突破成功率+10%'}]
+};
+
+let S = load();
+function defaultState() {
+  return { realm:0, cult:0, stones:0, dead:false, skill:0, pet:0, pill:0, ward:0,
+    weather:0, weatherEnd:Date.now()+2*3600*1000, lastTick:Date.now(), events:[], log:[], todayDeaths:0 };
+}
+function load() {
+  try { const raw = localStorage.getItem('xiuxian_idle'); if(raw) return Object.assign(defaultState(), JSON.parse(raw)); } catch(e){}
+  return defaultState();
+}
+function save() { try{ localStorage.setItem('xiuxian_idle', JSON.stringify(S)); }catch(e){} }
+
+const $ = id => document.getElementById(id);
+const rnd = (a,b) => Math.floor(Math.random()*(b-a+1))+a;
+const fmt = n => n>=10000 ? (n/10000).toFixed(1)+'万' : Math.floor(n);
+
+function curWeather() {
+  if(Date.now() >= S.weatherEnd) {
+    if(Math.random()<0.08) S.weather = WEATHERS.findIndex(w=>w.rare);
+    else S.weather = rnd(0,3);
+    S.weatherEnd = Date.now() + (2+Math.random()*2)*3600*1000;
+  }
+  return WEATHERS[S.weather];
+}
+
+function offlineSettle() {
+  const diff = Math.min((Date.now() - S.lastTick)/1000, 4*3600);
+  if(diff > 60 && !S.dead) {
+    const w = curWeather();
+    const gain = Math.floor(diff * 0.5 * w.cult);
+    S.cult += gain; S.stones += Math.floor(diff * 0.05);
+    for(let i=0;i<Math.min(3, Math.floor(diff/1800));i++){ if(Math.random()<0.5) addEvent(); }
+    S.log.unshift('离线'+Math.floor(diff/60)+'分钟，修为+'+fmt(gain));
+  }
+  S.lastTick = Date.now();
+}
+
+function addEvent() {
+  if(S.events.length >= 3) return;
+  const pool = EVENTS.filter(e=>S.realm>=e.min && S.realm<=e.max);
+  if(pool.length) S.events.push({...pool[rnd(0,pool.length-1)], id:Date.now()+Math.random()});
+}
+
+function renderEvent() {
+  const main = $('main');
+  if(S.dead){ renderDead(); return; }
+  if(S.events.length === 0){
+    main.innerHTML = '<div class="card"><div class="empty" style="text-align:center;color:#7a6a5a;padding:20px 0;line-height:2;">此地风平浪静。<br>修为在缓慢增长，<br>点击下方按钮安排行程。</div></div>';
+    return;
+  }
+  const ev = S.events[0];
+  let html = `<div class="card"><div class="title">${ev.title}</div><div class="desc">${ev.desc}</div>`;
+  ev.opts.forEach((o,i)=>{
+    html += `<button class="opt" data-i="${i}">${o.t}<span class="risk">${o.risk}</span></button>`;
+  });
+  html += '</div>';
+  main.innerHTML = html;
+  main.querySelectorAll('.opt').forEach(b=> b.onclick = ()=>choose(parseInt(b.dataset.i)));
+}
+
+function choose(i) {
+  const ev = S.events[0], opt = ev.opts[i], w = curWeather();
+  let rate = opt.rate;
+  if(opt.rate < 1) rate = Math.max(0.1, rate - (w.risk-1)*0.08);
+  if(S.skill===1 && ev.min<=3) rate = Math.min(1, rate+0.05);
+  if(S.skill===2) rate = Math.min(1, rate+0.03);
+  if(S.pill===2) rate = Math.min(1, rate+0.05);
+
+  if(Math.random() < rate) {
+    if(opt.ok.stones !== undefined) {
+      if(Array.isArray(opt.ok.stones)) S.stones += rnd(opt.ok.stones[0],opt.ok.stones[1]);
+      else S.stones += opt.ok.stones;
+    }
+    if(opt.ok.cult !== undefined) {
+      if(Array.isArray(opt.ok.cult)) S.cult += rnd(opt.ok.cult[0],opt.ok.cult[1]);
+      else S.cult += opt.ok.cult;
+    }
+    if(opt.ok.ward) S.ward += 1;
+    S.log.unshift(`【${ev.title}】${opt.t}成功`);
+  } else {
+    const f = opt.fail || {};
+    if(f.death && Math.random() < f.death) {
+      if(S.ward>0){ S.ward--; S.log.unshift('护道符生效，免于一死！'); }
+      else { die(`死于「${ev.title}」`); }
+    } else {
+      if(f.cult) S.cult = Math.max(0, S.cult + f.cult);
+      if(f.stones) S.stones = Math.max(0, S.stones + f.stones);
+      S.log.unshift(`【${ev.title}】${opt.t}失败`);
+    }
+  }
+  S.events.shift();
+  if(S.log.length>20) S.log.length=20;
+  save(); render();
+}
+
+function die(cause) {
+  S.dead = true; S.deathCause = cause; S.todayDeaths++;
+  S.skill = rnd(1,2); S.pet = rnd(1,2);
+  save(); render();
+}
+
+function renderDead() {
+  $('main').innerHTML = `<div class="card dead"><div class="title">身死道消</div>
+    <div class="desc">死因：${S.deathCause||'未知'}<br><br>修为清零，境界跌落至炼气初期。<br>转世传承：保留功法与灵宠各一。<br><br>（点击下方按钮重新开始）</div>
+    <button class="opt" id="rebirth">转世重修</button></div>`;
+  $('rebirth').onclick = () => {
+    S.dead = false; S.realm = 0; S.cult = 0; S.stones = 0; S.ward = 0; S.events = []; S.deathCause='';
+    S.log.unshift('转世重修，一切从头开始。');
+    save(); render();
+  };
+}
+
+// 突破增加全屏特效
+function tryBreak() {
+  if(S.dead) return;
+  const r = REALMS[S.realm];
+  if(!r || S.cult < r.need){ alert('修为不足'); return; }
+  const w = curWeather(), isBig = BIG_BREAK.has(S.realm+1);
+  let rate = isBig ? 0.55 : 0.75;
+  rate += w.breakBonus + (S.skill===2?0.08:0) + (S.pill===2?0.10:0) + (S.pet===1?0.03:0);
+  rate = Math.min(0.95, Math.max(0.15, rate));
+  
+  if(!confirm(`突破至「${REALMS[S.realm+1].name}」\n成功率：${Math.round(rate*100)}%\n是否引动天雷？`)) return;
+
+  // 播放雷劫特效
+  const thunder = $('thunder');
+  thunder.classList.remove('flash');
+  void thunder.offsetWidth; // 触发重绘
+  thunder.classList.add('flash');
+
+  setTimeout(() => {
+    if(Math.random() < rate) {
+      S.realm++; S.cult = 0;
+      S.log.unshift(`突破成功，晋入${REALMS[S.realm].name}`);
+    } else {
+      const failLoss = isBig ? 0.5 : 0.3;
+      const deathRate = isBig ? 0.25 * w.risk : 0;
+      if(isBig && Math.random() < deathRate) {
+        if(S.ward>0){ S.ward--; S.cult = Math.floor(S.cult*(1-failLoss)); S.log.unshift('护道符生效，突破失败但保命'); }
+        else { die(`突破${REALMS[S.realm+1].name}失败`); return; }
+      } else {
+        S.cult = Math.floor(S.cult*(1-failLoss));
+        S.log.unshift(`突破失败，修为-${Math.round(failLoss*100)}%`);
+      }
+    }
+    save(); render();
+  }, 400); // 延迟响应特效
+}
+
+function send() {
+  if(S.dead) return;
+  const w = curWeather();
+  const gain = Math.floor(rnd(30,80) * w.cult * (1 + (S.skill===1?0.15:0)));
+  if(rnd(0,100) < 15 * w.risk) {
+    if(Math.random()<0.3) {
+      if(S.ward>0){ S.ward--; S.log.unshift('派遣遇险，护道符保命'); }
+      else { die('派遣途中遇险'); return; }
+    } else {
+      S.cult = Math.max(0, S.cult - Math.floor(gain*0.5));
+      S.log.unshift(`派遣遇险，修为-${fmt(Math.floor(gain*0.5))}`);
+    }
+  } else {
+    S.cult += gain; S.stones += rnd(5,20);
+    S.log.unshift(`派遣归来，修为+${fmt(gain)}`);
+  }
+  if(S.log.length>20) S.log.length=20;
+  save(); render();
+}
+
+function gain() {
+  if(S.dead) return;
+  const w = curWeather();
+  const g = Math.floor(20 * w.cult);
+  S.cult += g; S.stones += rnd(2,8);
+  if(Math.random()<0.3) addEvent();
+  S.log.unshift(`收菜，修为+${fmt(g)}`);
+  if(S.log.length>20) S.log.length=20;
+  save(); render();
+}
+
+function build() {
+  if(S.dead) return;
+  const sheet = $('sheet');
+  let html = '<h3>仙道构筑</h3>';
+  html += slotHtml('功法','skill',SKILLS.skill,S.skill);
+  html += slotHtml('灵宠','pet',SKILLS.pet,S.pet);
+  html += slotHtml('丹道','pill',SKILLS.pill,S.pill);
+  html += `<div class="log">${S.log.slice(0,5).join('<br>')}</div>`;
+  html += '<button class="close" onclick="document.getElementById(\'mask\').classList.remove(\'show\')">收起玉简</button>';
+  sheet.innerHTML = html;
+  $('mask').classList.add('show');
+  sheet.querySelectorAll('[data-swap]').forEach(b=>{
+    b.onclick = () => {
+      S[b.dataset.swap] = (S[b.dataset.swap]+1) % SKILLS[b.dataset.swap].length;
+      save(); build(); render();
+    };
+  });
+}
+
+function slotHtml(label,key,arr,cur) {
+  return `<div class="slot"><span class="k">${label}</span>
+    <span class="v">${arr[cur].name}${arr[cur].e?'（'+arr[cur].e+'）':''}</span>
+    <button data-swap="${key}">切换</button></div>`;
+}
+
+function render() {
+  if(S.dead){ 
+    $('realm').textContent = '已身死'; $('prog').style.width = '0%';
+    $('cult').textContent = ''; $('weather').innerHTML = ''; $('wardText').textContent = '';
+    renderDead(); return; 
+  }
+  const r = REALMS[S.realm], w = curWeather();
+  $('realm').textContent = r.name;
+  $('stones').textContent = '灵石 ' + fmt(S.stones);
+  $('prog').style.width = Math.min(100, S.cult/r.need*100) + '%';
+  $('cult').textContent = '修为 ' + fmt(S.cult) + ' / ' + fmt(r.need);
+  $('weather').innerHTML = `天气：<b>${w.name}</b>（${w.desc}）`;
+  $('wardText').textContent = S.ward > 0 ? `护道符 ×${S.ward}` : '';
+  $('btnBreak').classList.toggle('hot', S.cult >= r.need);
+  renderEvent();
+}
+
+setInterval(()=>{
+  if(!S.dead){
+    const w = curWeather();
+    S.cult += 0.5 * w.cult;
+    S.stones += 0.05;
+    if(Math.random()<0.005) addEvent();
+  }
+  render(); save();
+}, 1000);
+
+offlineSettle(); curWeather(); render();
+$('btnBreak').onclick = tryBreak;
+$('btnSend').onclick = send;
+$('btnBuild').onclick = build;
+$('btnGain').onclick = gain;
+$('mask').onclick = e => { if(e.target.id==='mask') $('mask').classList.remove('show'); };
+</script>
+</body>
+</html>
